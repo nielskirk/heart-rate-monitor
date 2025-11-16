@@ -106,15 +106,13 @@
     </main>
 
     <!-- Controls (R3.1, R3.2, R3.3) -->
-    <footer class="flex-shrink-0 grid grid-cols-4 gap-2 p-4 bg-gray-900 border-t border-gray-700">
-        <button id="fullscreenButton" class="p-4 bg-gray-600 text-white font-bold rounded-lg shadow-lg active:bg-gray-700 disabled:opacity-50">
-            Fullscreen
-        </button>
+    <footer class="flex-shrink-0 grid grid-cols-3 gap-2 p-4 bg-gray-900 border-t border-gray-700">
+        <!-- Fullscreen button removed -->
         <button id="startButton" class="p-4 bg-blue-600 text-white font-bold rounded-lg shadow-lg active:bg-blue-700 disabled:opacity-50">
             Start
         </button>
         <button id="markButton" class="p-4 bg-yellow-500 text-black font-bold rounded-lg shadow-lg active:bg-yellow-600 disabled:opacity-50" disabled>
-            Mark Segment
+            Mark
         </button>
         <button id="stopButton" class="p-4 bg-red-600 text-white font-bold rounded-lg shadow-lg active:bg-red-700 disabled:opacity-50" disabled>
             Stop
@@ -133,7 +131,7 @@
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const markButton = document.getElementById('markButton');
-        const fullscreenButton = document.getElementById('fullscreenButton');
+        // const fullscreenButton = document.getElementById('fullscreenButton'); // REMOVED
         const chartCanvas = document.getElementById('hrChart');
 
         // --- 2. State Variables ---
@@ -180,41 +178,9 @@
             console.log(`Status: ${status} ${error ? `(Error: ${error})` : ''}`);
         }
 
-        /**
-         * Attempts to enter fullscreen mode.
-         * This must be called from a user-initiated event (e.g., a click).
-         */
-        function goFullscreen() {
-            const element = document.documentElement; // Get the root HTML element
-            if (element.requestFullscreen) {
-                element.requestFullscreen();
-            } else if (element.webkitRequestFullscreen) { // Safari/Bluefy
-                element.webkitRequestFullscreen();
-            } else if (element.mozRequestFullScreen) { // Firefox
-                element.mozRequestFullScreen();
-            } else if (element.msRequestFullscreen) { // IE/Edge
-                element.msRequestFullscreen();
-            } else {
-                console.warn("Fullscreen API is not supported on this browser.");
-            }
-        }
+        // REMOVED goFullscreen() function
 
-        /**
-         * Attempts to exit fullscreen mode.
-         */
-        function exitFullscreen() {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) { // Safari/Bluefy
-                document.webkitExitFullscreen();
-            } else if (document.mozCancelFullScreen) { // Firefox
-                document.mozCancelFullScreen();
-            } else if (document.msExitFullscreen) { // IE/Edge
-                document.msExitFullscreen();
-            } else {
-                console.warn("Fullscreen API is not supported for exiting.");
-            }
-        }
+        // REMOVED exitFullscreen() function
 
         /**
          * Manages the enabled/disabled state of control buttons.
@@ -654,7 +620,7 @@
             startButton.addEventListener('click', startRecording);
             stopButton.addEventListener('click', stopRecording);
             markButton.addEventListener('click', markSegment);
-            fullscreenButton.addEventListener('click', goFullscreen);
+            // fullscreenButton.addEventListener('click', goFullscreen); // REMOVED
         });
     </script>
 </body>
