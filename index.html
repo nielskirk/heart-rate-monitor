@@ -125,6 +125,7 @@
         let sessionTimerInterval = null;
         let segmentTimerInterval = null;
         let maxSessionTimeout = null;
+        let wakeLock = null; // ADDED: To hold the screen wake lock
 
         // --- Constants ---
         const HR_SERVICE_UUID = 'heart_rate';
@@ -393,14 +394,17 @@
             // 2. Update UI
             updateButtonStates(true);
             
-            // 3. Start scanning
+            // 3. Request Screen Wake Lock
+            await requestWakeLock();
+
+            // 4. Start scanning
             if (!await connectToBLE()) {
                 // Connection failed (e.g., timeout, user cancel)
                 stopRecording(); // Reset UI back to idle
                 return;
             }
             
-            // 4. (R3.4) Set max session timeout
+            // 5. (R3.4) Set max session timeout
             clearTimeout(maxSessionTimeout);
             maxSessionTimeout = setTimeout(() => {
                 console.log("Max session duration (8 hours) reached. Stopping.");
@@ -412,7 +416,7 @@
         /**
          * (R3.2) Stops the recording session.
          */
-        function stopRecording() {
+        async function stopRecording() {
             if (bluetoothDevice) {
                 // Remove the listener *first* to prevent onDeviceDisconnect from firing
                 // if this was a user-initiated stop.
@@ -441,6 +445,9 @@
             clearTimeout(maxSessionTimeout);
             maxSessionTimeout = null;
             
+            // Release Screen Wake Lock
+            releaseWakeLock();
+
             updateButtonStates(false);
             // Don't reset displays here, user might want to see final stats.
             // Only set status if it's not already an error.
@@ -543,6 +550,7 @@
         function onDeviceDisconnect() {
             console.log("Device disconnected unexpectedly.");
             setStatus('Error', 'Device Disconnected');
+            // stopRecording() will automatically release the wake lock
             stopRecording(); // Call stopRecording to clean up UI and state
         }
 
@@ -574,7 +582,41 @@
             updateChartData(timestamp, bpm);
         }
 
-        // --- 8. Initialization ---
+        // --- 8. Wake Lock Functions ---
+
+        /**
+         * Requests a screen wake lock to keep the device from sleeping.
+         */
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator && !wakeLock) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Screen Wake Lock was released');
+                        wakeLock = null; // Set to null so it can be re-acquired
+                    });
+                    console.log('Screen Wake Lock acquired');
+                } catch (err) {
+                    console.error(`Wake Lock Error: ${err.name}: ${err.message}`);
+                    // This is not a critical error, so we just log it
+                }
+            } else {
+                console.log('Wake Lock API not supported or lock already held.');
+            }
+        }
+
+        /**
+         * Releases the screen wake lock.
+         */
+        function releaseWakeLock() {
+            if (wakeLock) {
+                wakeLock.release();
+                wakeLock = null;
+                console.log('Screen Wake Lock released');
+            }
+        }
+
+        // --- 9. Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
             initChart();
             updateButtonStates(false);
@@ -589,6 +631,15 @@
             startButton.addEventListener('click', startRecording);
             stopButton.addEventListener('click', stopRecording);
             markButton.addEventListener('click', markSegment);
+
+            // Add listener to re-acquire wake lock if tab becomes visible
+            document.addEventListener('visibilitychange', async () => {
+                if (wakeLock === null && document.visibilityState === 'visible' && startButton.disabled) {
+                    // We are in a session (startButton is disabled) and the lock was released
+                    console.log('Re-acquiring wake lock on visibility change');
+                    await requestWakeLock();
+                }
+            });
         });
     </script>
 </body>
