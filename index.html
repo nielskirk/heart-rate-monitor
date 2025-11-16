@@ -151,8 +151,9 @@
 
         // --- Constants ---
         // (R1.1) --- IMPORTANT ---
-        // Set this to the *exact* name of your device.
-        const DEVICE_NAME = "Polar Sense E138CF25";
+        // We will now filter by the 'heart_rate' service instead of a fixed name,
+        // as this is more reliable and lets you pick your device from a list.
+        // const DEVICE_NAME = "Polar Sense E138CF25"; // No longer used for filtering
         
         // Bluetooth Service and Characteristic UUIDs for Heart Rate
         const HR_SERVICE_UUID = 'heart_rate';
@@ -496,28 +497,22 @@
             try {
                 setStatus('Scanning...');
                 
-                // (R1.3) Use Promise.race for a 60-second scan timeout
-                const scanTimeout = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Scan Timeout: Device not found after 60s.')), 60000)
-                );
+                // (R1.3) We will now scan by SERVICE, which is more robust.
+                // The browser will show a picker list of all nearby Heart Rate devices.
+                // The scan "timeout" is effectively the user pressing "Cancel" on the picker.
                 
-                console.log(`Scanning for device named: "${DEVICE_NAME}"`);
+                console.log(`Scanning for devices with the Heart Rate service...`);
                 
-                bluetoothDevice = await Promise.race([
-                    navigator.bluetooth.requestDevice({
-                        filters: [
-                            { name: DEVICE_NAME }
-                            // Note: We filter by name as requested (R1.1).
-                            // A more robust filter would be by service:
-                            // { services: [HR_SERVICE_UUID] }
-                        ],
-                        optionalServices: [HR_SERVICE_UUID] // We still need to request the service
-                    }),
-                    scanTimeout
-                ]);
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        // R1.1 (Modified): Filter for the Heart Rate service, not a specific name.
+                        { services: [HR_SERVICE_UUID] }
+                    ],
+                    optionalServices: [HR_SERVICE_UUID] // We still need to request the service
+                });
                 
                 setStatus('Connecting...');
-                console.log('Device found, connecting to GATT server...');
+                console.log(`Device found: ${bluetoothDevice.name}. Connecting to GATT server...`);
                 
                 // (R1.4) Add disconnect listener
                 bluetoothDevice.addEventListener('gattserverdisconnected', onDeviceDisconnect);
@@ -545,7 +540,8 @@
             } catch (error) {
                 console.error("Bluetooth Connection Error:", error);
                 if (error.name === 'NotFoundError') {
-                    setStatus('Error', 'Device not found. Make sure it is on and in range.');
+                    // This error now means the user cancelled the picker
+                    setStatus('Error', 'No device selected.');
                 } else if (error.name === 'NotAllowedError') {
                     setStatus('Error', 'Bluetooth permission was denied.');
                 } else {
