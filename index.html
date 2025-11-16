@@ -4,17 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Heart Rate Logger</title>
-    <!-- 1. Load Tailwind CSS for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 1. Load Tailwind CSS for styling --><script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 2. Load Chart.js for data visualization -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <!-- 2. Load Chart.js for data visualization --><script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     
-    <!-- 3. Load Chart.js adapters for time-series axis -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- 3. Load Chart.js adapters for time-series axis --><script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     
-    <!-- 4. Load Chart.js annotation plugin for segment markers -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <!-- 4. Load Chart.js annotation plugin for segment markers --><script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0/dist/chartjs-plugin-annotation.min.js"></script>
 
     <style>
         /* Use the Inter font, which is clean and modern */
@@ -49,65 +45,44 @@
 </head>
 <body class="flex flex-col h-full text-gray-100 overflow-hidden">
 
-    <!-- Header -->
-    <!-- <header class="bg-gray-800 shadow-md p-4 flex-shrink-0">
-        <h1 class="text-xl font-bold text-center text-white">Heart Rate Logger</h1>
-    </header> --> <!-- HEADER REMOVED -->
+    <!-- New compact header for status --><header class="bg-gray-800 shadow-md p-2 flex items-center justify-center flex-shrink-0">
+        <span id="statusIndicator" class="w-3 h-3 rounded-full mr-2"></span>
+        <span id="statusDisplay" class="text-sm font-semibold text-white">Idle</span>
+        <span id="errorDisplay" class="text-sm text-red-400 ml-2"></span>
+    </header>
 
-    <!-- Main Content Area -->
-    <main class="flex-grow flex flex-col p-4 overflow-y-auto space-y-4">
+    <!-- Main Content Area --><main class="flex-grow flex flex-col p-4 overflow-y-auto space-y-4">
         
-        <!-- Status and Live BPM -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <!-- Status Box (R1.2) -->
-            <div class="bg-gray-800 rounded-lg p-4 flex flex-col justify-center items-center sm:col-span-1">
-                <span class="text-sm font-semibold text-blue-300">STATUS</span>
-                <span id="statusDisplay" class="text-2xl font-bold text-center">Idle</span>
-                <span id="errorDisplay" class="text-sm text-red-400 text-center"></span>
-            </div>
-            
-            <!-- Live BPM (R2.1) -->
-            <div class="bg-gray-800 rounded-lg p-6 flex flex-col justify-center items-center sm:col-span-2">
-                <!-- "LIVE HEART RATE" text removed -->
-                <span id="bpmDisplay" class="text-red-400">--</span>
-                <span class="text-lg font-semibold text-gray-400">BPM</span>
-            </div>
+        <!-- Live BPM (R2.1) - Now takes full width as status is in header --><div class="bg-gray-800 rounded-lg p-6 flex flex-col justify-center items-center">
+            <span id="bpmDisplay" class="text-red-400">--</span>
+            <span class="text-lg font-semibold text-gray-400">BPM</span>
         </div>
 
-        <!-- Timers and Averages (R2.2 - R2.5) -->
-        <!-- This section is now a single condensed grid -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <!-- Session Timer -->
-            <div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
+        <!-- Timers and Averages (R2.2 - R2.5) --><div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <!-- Session Timer --><div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
                 <span class="font-semibold text-blue-300 text-sm">Session</span>
                 <span id="sessionTimer" class="text-2xl font-bold">00:00:00</span>
             </div>
-            <!-- Segment Timer -->
-            <div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
+            <!-- Segment Timer --><div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
                 <span class="font-semibold text-blue-300 text-sm">Segment</span>
                 <span id="segmentTimer" class="text-2xl font-bold">00:00:00</span>
             </div>
-            <!-- Session Avg -->
-            <div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
+            <!-- Session Avg --><div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
                 <span class="font-semibold text-green-300 text-sm">Session Avg</span>
                 <span id="sessionAvgBpm" class="text-2xl font-bold">--</span>
             </div>
-            <!-- Segment Avg -->
-            <div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
+            <!-- Segment Avg --><div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
                 <span class="font-semibold text-green-300 text-sm">Segment Avg</span>
                 <span id="segmentAvgBpm" class="text-2xl font-bold">--</span>
             </div>
         </div>
 
-        <!-- Chart (R4.1, R4.2, R4.3) -->
-        <div class="flex-grow bg-gray-800 rounded-lg p-4 relative min-h-[200px] sm:min-h-[300px]">
+        <!-- Chart (R4.1, R4.2, R4.3) --><div class="flex-grow bg-gray-800 rounded-lg p-4 relative min-h-[200px] sm:min-h-[300px]">
             <canvas id="hrChart"></canvas>
         </div>
     </main>
 
-    <!-- Controls (R3.1, R3.2, R3.3) -->
-    <footer class="flex-shrink-0 grid grid-cols-3 gap-2 p-4 bg-gray-900 border-t border-gray-700">
-        <!-- Fullscreen button removed -->
+    <!-- Controls (R3.1, R3.2, R3.3) --><footer class="flex-shrink-0 grid grid-cols-3 gap-2 p-4 bg-gray-900 border-t border-gray-700">
         <button id="startButton" class="p-4 bg-blue-600 text-white font-bold rounded-lg shadow-lg active:bg-blue-700 disabled:opacity-50">
             Start
         </button>
@@ -121,8 +96,11 @@
 
     <script>
         // --- 1. DOM Element References ---
+        // Removed original statusDisplay and errorDisplay
+        const statusIndicator = document.getElementById('statusIndicator'); // NEW
         const statusDisplay = document.getElementById('statusDisplay');
         const errorDisplay = document.getElementById('errorDisplay');
+
         const bpmDisplay = document.getElementById('bpmDisplay');
         const sessionTimer = document.getElementById('sessionTimer');
         const segmentTimer = document.getElementById('segmentTimer');
@@ -131,7 +109,6 @@
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const markButton = document.getElementById('markButton');
-        // const fullscreenButton = document.getElementById('fullscreenButton'); // REMOVED
         const chartCanvas = document.getElementById('hrChart');
 
         // --- 2. State Variables ---
@@ -150,25 +127,15 @@
         let maxSessionTimeout = null;
 
         // --- Constants ---
-        // (R1.1) --- IMPORTANT ---
-        // We will now filter by the 'heart_rate' service instead of a fixed name,
-        // as this is more reliable and lets you pick your device from a list.
-        // const DEVICE_NAME = "Polar Sense E138CF25"; // No longer used for filtering
-        
-        // Bluetooth Service and Characteristic UUIDs for Heart Rate
         const HR_SERVICE_UUID = 'heart_rate';
         const HR_CHARACTERISTIC_UUID = 'heart_rate_measurement';
-
-        // (R3.4) Max session time: 8 hours in milliseconds
         const MAX_SESSION_DURATION = 8 * 60 * 60 * 1000; 
-        
-        // (R4.2) Initial chart window: 5 minutes in milliseconds
         const INITIAL_CHART_WINDOW = 5 * 60 * 1000;
 
         // --- 3. UI and Helper Functions ---
 
         /**
-         * (R1.2) Updates the status display.
+         * (R1.2) Updates the status display with colored indicator.
          * @param {string} status - The text to display (e.g., "Scanning...").
          * @param {string} [error=''] - Optional error message.
          */
@@ -176,11 +143,19 @@
             statusDisplay.textContent = status;
             errorDisplay.textContent = error;
             console.log(`Status: ${status} ${error ? `(Error: ${error})` : ''}`);
+
+            // Update indicator color based on status
+            statusIndicator.className = 'w-3 h-3 rounded-full mr-2'; // Reset classes
+            if (error) {
+                statusIndicator.classList.add('bg-red-500'); // Red for error
+            } else if (status === 'Connected') {
+                statusIndicator.classList.add('bg-green-500'); // Green for connected
+            } else if (status === 'Scanning...' || status === 'Connecting...') {
+                statusIndicator.classList.add('bg-yellow-500'); // Yellow for active but not yet connected
+            } else {
+                statusIndicator.classList.add('bg-gray-500'); // Gray for idle
+            }
         }
-
-        // REMOVED goFullscreen() function
-
-        // REMOVED exitFullscreen() function
 
         /**
          * Manages the enabled/disabled state of control buttons.
@@ -405,9 +380,6 @@
          * (R3.1) Starts the recording session.
          */
         async function startRecording() {
-            // 0. Attempt to go fullscreen (must be first, as this is the user-click event)
-            // goFullscreen(); // REMOVED: This conflicts with the Bluetooth permission request.
-            
             // 1. Reset state
             sessionReadings = [];
             segmentReadings = [];
@@ -441,9 +413,6 @@
          * (R3.2) Stops the recording session.
          */
         function stopRecording() {
-            // 0. Exit fullscreen mode
-            // exitFullscreen(); // REMOVED: User can exit manually or with the stop button.
-
             if (bluetoothDevice) {
                 // Remove the listener *first* to prevent onDeviceDisconnect from firing
                 // if this was a user-initiated stop.
@@ -620,7 +589,6 @@
             startButton.addEventListener('click', startRecording);
             stopButton.addEventListener('click', stopRecording);
             markButton.addEventListener('click', markSegment);
-            // fullscreenButton.addEventListener('click', goFullscreen); // REMOVED
         });
     </script>
 </body>
