@@ -436,20 +436,29 @@
          * (R3.2) Stops the recording session.
          */
         function stopRecording() {
-            if (bluetoothDevice && bluetoothDevice.gatt.connected) {
-                console.log("Disconnecting from device...");
-                bluetoothDevice.gatt.disconnect();
+            if (bluetoothDevice) {
+                // Remove the listener *first* to prevent onDeviceDisconnect from firing
+                // if this was a user-initiated stop.
+                bluetoothDevice.removeEventListener('gattserverdisconnected', onDeviceDisconnect);
+                
+                if (bluetoothDevice.gatt.connected) {
+                    console.log("Disconnecting from device...");
+                    
+                    // Clean up resources *before* disconnecting
+                    if (hrCharacteristic) {
+                        hrCharacteristic.stopNotifications()
+                            .catch(e => console.warn("Error stopping notifications (this is common on disconnect):", e)); // Just warn, not critical
+                        hrCharacteristic.removeEventListener('characteristicvaluechanged', handleHRData);
+                        hrCharacteristic = null;
+                    }
+                    
+                    bluetoothDevice.gatt.disconnect();
+                }
             }
             
-            // Clean up resources
-            if (hrCharacteristic) {
-                hrCharacteristic.stopNotifications()
-                    .catch(e => console.warn("Error stopping notifications:", e));
-                hrCharacteristic.removeEventListener('characteristicvaluechanged', handleHRData);
-                hrCharacteristic = null;
-            }
-            
+            // Null out vars regardless
             bluetoothDevice = null;
+            hrCharacteristic = null; // Be sure
             
             stopTimers();
             clearTimeout(maxSessionTimeout);
@@ -557,7 +566,7 @@
         function onDeviceDisconnect() {
             console.log("Device disconnected unexpectedly.");
             setStatus('Error', 'Device Disconnected');
-            stopRecording();
+            stopRecording(); // Call stopRecording to clean up UI and state
         }
 
         /**
