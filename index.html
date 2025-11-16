@@ -106,7 +106,10 @@
     </main>
 
     <!-- Controls (R3.1, R3.2, R3.3) -->
-    <footer class="flex-shrink-0 grid grid-cols-3 gap-2 p-4 bg-gray-900 border-t border-gray-700">
+    <footer class="flex-shrink-0 grid grid-cols-4 gap-2 p-4 bg-gray-900 border-t border-gray-700">
+        <button id="fullscreenButton" class="p-4 bg-gray-600 text-white font-bold rounded-lg shadow-lg active:bg-gray-700 disabled:opacity-50">
+            Fullscreen
+        </button>
         <button id="startButton" class="p-4 bg-blue-600 text-white font-bold rounded-lg shadow-lg active:bg-blue-700 disabled:opacity-50">
             Start
         </button>
@@ -130,6 +133,7 @@
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const markButton = document.getElementById('markButton');
+        const fullscreenButton = document.getElementById('fullscreenButton');
         const chartCanvas = document.getElementById('hrChart');
 
         // --- 2. State Variables ---
@@ -436,7 +440,7 @@
          */
         async function startRecording() {
             // 0. Attempt to go fullscreen (must be first, as this is the user-click event)
-            goFullscreen();
+            // goFullscreen(); // REMOVED: This conflicts with the Bluetooth permission request.
             
             // 1. Reset state
             sessionReadings = [];
@@ -472,7 +476,7 @@
          */
         function stopRecording() {
             // 0. Exit fullscreen mode
-            exitFullscreen();
+            // exitFullscreen(); // REMOVED: User can exit manually or with the stop button.
 
             if (bluetoothDevice) {
                 // Remove the listener *first* to prevent onDeviceDisconnect from firing
@@ -650,6 +654,7 @@
             startButton.addEventListener('click', startRecording);
             stopButton.addEventListener('click', stopRecording);
             markButton.addEventListener('click', markSegment);
+            fullscreenButton.addEventListener('click', goFullscreen);
         });
     </script>
 </body>
