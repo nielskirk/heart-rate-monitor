@@ -28,14 +28,14 @@
         /* Custom style for the large BPM text for performance */
         #bpmDisplay {
             font-weight: 900; /* Black weight */
-            font-size: 7rem; /* Responsive large text */
+            font-size: 6rem; /* Responsive large text (was 7rem) */
             line-height: 1;
         }
         
         /* Responsive adjustments for smaller screens */
         @media (max-width: 640px) {
             #bpmDisplay {
-                font-size: 5rem;
+                font-size: 4rem; /* (was 5rem) */
             }
             .stat-grid {
                 grid-template-columns: 1fr; /* Stack stats on small screens */
@@ -53,9 +53,9 @@
 
     <!-- Main Content Area --><main class="flex-grow flex flex-col p-4 overflow-y-auto space-y-4">
         
-        <!-- Live BPM (R2.1) - Now takes full width as status is in header --><div class="bg-gray-800 rounded-lg p-6 flex flex-col justify-center items-center">
+        <!-- Live BPM (R2.1) - Now takes full width as status is in header --><div class="bg-gray-800 rounded-lg p-4 flex flex-row justify-center items-baseline">
             <span id="bpmDisplay" class="text-red-400">--</span>
-            <span class="text-lg font-semibold text-gray-400">BPM</span>
+            <span class="text-xl font-semibold text-gray-400 ml-3">BPM</span>
         </div>
 
         <!-- Timers and Averages (R2.2 - R2.5) --><div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
