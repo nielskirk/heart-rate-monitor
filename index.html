@@ -50,9 +50,9 @@
 <body class="flex flex-col h-full text-gray-100 overflow-hidden">
 
     <!-- Header -->
-    <header class="bg-gray-800 shadow-md p-4 flex-shrink-0">
+    <!-- <header class="bg-gray-800 shadow-md p-4 flex-shrink-0">
         <h1 class="text-xl font-bold text-center text-white">Heart Rate Logger</h1>
-    </header>
+    </header> --> <!-- HEADER REMOVED -->
 
     <!-- Main Content Area -->
     <main class="flex-grow flex flex-col p-4 overflow-y-auto space-y-4">
@@ -68,36 +68,34 @@
             
             <!-- Live BPM (R2.1) -->
             <div class="bg-gray-800 rounded-lg p-6 flex flex-col justify-center items-center sm:col-span-2">
-                <span class="text-lg font-semibold text-red-300">LIVE HEART RATE</span>
+                <!-- "LIVE HEART RATE" text removed -->
                 <span id="bpmDisplay" class="text-red-400">--</span>
                 <span class="text-lg font-semibold text-gray-400">BPM</span>
             </div>
         </div>
 
         <!-- Timers and Averages (R2.2 - R2.5) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 stat-grid">
-            <!-- Timers -->
-            <div class="bg-gray-800 rounded-lg p-4 space-y-3">
-                <div class="flex justify-between items-baseline">
-                    <span class="font-semibold text-blue-300">Session Timer</span>
-                    <span id="sessionTimer" class="text-2xl font-bold">00:00:00</span>
-                </div>
-                <div class="flex justify-between items-baseline">
-                    <span class="font-semibold text-blue-300">Segment Timer</span>
-                    <span id="segmentTimer" class="text-2xl font-bold">00:00:00</span>
-                </div>
+        <!-- This section is now a single condensed grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <!-- Session Timer -->
+            <div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
+                <span class="font-semibold text-blue-300 text-sm">Session</span>
+                <span id="sessionTimer" class="text-2xl font-bold">00:00:00</span>
             </div>
-            
-            <!-- Averages -->
-            <div class="bg-gray-800 rounded-lg p-4 space-y-3">
-                <div class="flex justify-between items-baseline">
-                    <span class="font-semibold text-green-300">Session Avg</span>
-                    <span id="sessionAvgBpm" class="text-2xl font-bold">--</span>
-                </div>
-                <div class="flex justify-between items-baseline">
-                    <span class="font-semibold text-green-300">Segment Avg</span>
-                    <span id="segmentAvgBpm" class="text-2xl font-bold">--</span>
-                </div>
+            <!-- Segment Timer -->
+            <div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
+                <span class="font-semibold text-blue-300 text-sm">Segment</span>
+                <span id="segmentTimer" class="text-2xl font-bold">00:00:00</span>
+            </div>
+            <!-- Session Avg -->
+            <div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
+                <span class="font-semibold text-green-300 text-sm">Session Avg</span>
+                <span id="sessionAvgBpm" class="text-2xl font-bold">--</span>
+            </div>
+            <!-- Segment Avg -->
+            <div class="bg-gray-800 rounded-lg p-4 flex flex-col items-center">
+                <span class="font-semibold text-green-300 text-sm">Segment Avg</span>
+                <span id="segmentAvgBpm" class="text-2xl font-bold">--</span>
             </div>
         </div>
 
@@ -176,6 +174,25 @@
             statusDisplay.textContent = status;
             errorDisplay.textContent = error;
             console.log(`Status: ${status} ${error ? `(Error: ${error})` : ''}`);
+        }
+
+        /**
+         * Attempts to enter fullscreen mode.
+         * This must be called from a user-initiated event (e.g., a click).
+         */
+        function goFullscreen() {
+            const element = document.documentElement; // Get the root HTML element
+            if (element.requestFullscreen) {
+                element.requestFullscreen();
+            } else if (element.webkitRequestFullscreen) { // Safari/Bluefy
+                element.webkitRequestFullscreen();
+            } else if (element.mozRequestFullScreen) { // Firefox
+                element.mozRequestFullScreen();
+            } else if (element.msRequestFullscreen) { // IE/Edge
+                element.msRequestFullscreen();
+            } else {
+                console.warn("Fullscreen API is not supported on this browser.");
+            }
         }
 
         /**
@@ -295,9 +312,11 @@
                         x: {
                             type: 'time',
                             time: {
-                                unit: 'minute',
+                                // unit: 'minute', // REMOVED: Let Chart.js auto-detect the best unit
                                 displayFormats: {
-                                    minute: 'HH:mm:ss'
+                                    second: 'HH:mm:ss', // Added format for second-level ticks
+                                    minute: 'HH:mm:ss',
+                                    hour: 'HH:mm' // Added format for hour-level ticks
                                 },
                                 tooltipFormat: 'HH:mm:ss'
                             },
@@ -403,6 +422,9 @@
          * (R3.1) Starts the recording session.
          */
         async function startRecording() {
+            // 0. Attempt to go fullscreen (must be first, as this is the user-click event)
+            goFullscreen();
+            
             // 1. Reset state
             sessionReadings = [];
             segmentReadings = [];
