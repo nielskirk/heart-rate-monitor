@@ -196,6 +196,23 @@
         }
 
         /**
+         * Attempts to exit fullscreen mode.
+         */
+        function exitFullscreen() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { // Safari/Bluefy
+                document.webkitExitFullscreen();
+            } else if (document.mozCancelFullScreen) { // Firefox
+                document.mozCancelFullScreen();
+            } else if (document.msExitFullscreen) { // IE/Edge
+                document.msExitFullscreen();
+            } else {
+                console.warn("Fullscreen API is not supported for exiting.");
+            }
+        }
+
+        /**
          * Manages the enabled/disabled state of control buttons.
          * @param {boolean} isRecording - Whether a session is active.
          */
@@ -310,26 +327,19 @@
                     animation: false,
                     scales: {
                         x: {
-                            type: 'time',
-                            time: {
-                                // unit: 'minute', // REMOVED: Let Chart.js auto-detect the best unit
-                                displayFormats: {
-                                    second: 'HH:mm:ss', // Added format for second-level ticks
-                                    minute: 'HH:mm:ss',
-                                    hour: 'HH:mm' // Added format for hour-level ticks
-                                },
-                                tooltipFormat: 'HH:mm:ss'
-                            },
+                            type: 'linear', // CHANGED: from 'time' to 'linear'
+                            // REMOVED: All 'time' specific options
                             title: {
                                 display: true,
-                                text: 'Session Time'
+                                text: 'Session Time (Minutes)' // CHANGED: Updated title
                             },
                             ticks: {
                                 color: 'rgb(209, 213, 219)' // gray-300
                             },
                             grid: {
                                 color: 'rgba(255, 255, 255, 0.1)'
-                            }
+                            },
+                            beginAtZero: true // ADDED: Ensure axis starts at 0
                         },
                         y: {
                             title: {
@@ -368,19 +378,21 @@
         function updateChartData(timestamp, bpm) {
             if (!chartInstance) return;
             
-            chartInstance.data.datasets[0].data.push({ x: timestamp, y: bpm });
+            const elapsedMinutes = (timestamp - sessionStartTime) / 60000; // 60 * 1000
+            
+            chartInstance.data.datasets[0].data.push({ x: elapsedMinutes, y: bpm });
             
             // (R4.2) Dynamic X-Axis
-            const sessionDuration = timestamp - sessionStartTime;
-            let minTime = sessionStartTime;
+            const sessionDurationMs = timestamp - sessionStartTime;
+            let minTime = 0; // CHANGED: Always start at 0
             let maxTime;
 
-            if (sessionDuration <= INITIAL_CHART_WINDOW) {
+            if (sessionDurationMs <= INITIAL_CHART_WINDOW) {
                 // In the first 5 minutes, show a fixed 5-minute window
-                maxTime = sessionStartTime + INITIAL_CHART_WINDOW;
+                maxTime = INITIAL_CHART_WINDOW / 60000; // 5.0 minutes
             } else {
                 // After 5 minutes, "zoom out" to show the entire session
-                maxTime = timestamp;
+                maxTime = elapsedMinutes; // Use elapsed minutes
             }
             
             chartInstance.options.scales.x.min = minTime;
@@ -396,12 +408,13 @@
             if (!chartInstance) return;
             
             const timestamp = Date.now();
+            const elapsedMinutes = (timestamp - sessionStartTime) / 60000; // Calculate elapsed minutes
             const annotationName = `segment-${timestamp}`;
             
             chartInstance.options.plugins.annotation.annotations[annotationName] = {
                 type: 'line',
                 scaleID: 'x',
-                value: timestamp,
+                value: elapsedMinutes, // CHANGED: Use elapsed minutes instead of timestamp
                 borderColor: 'rgb(234, 179, 8)', // yellow-500
                 borderWidth: 2,
                 borderDash: [6, 6], // Dashed line
@@ -458,6 +471,9 @@
          * (R3.2) Stops the recording session.
          */
         function stopRecording() {
+            // 0. Exit fullscreen mode
+            exitFullscreen();
+
             if (bluetoothDevice) {
                 // Remove the listener *first* to prevent onDeviceDisconnect from firing
                 // if this was a user-initiated stop.
