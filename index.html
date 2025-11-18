@@ -50,10 +50,18 @@
 <body class="flex flex-col h-full text-gray-100 overflow-hidden">
 
     <!-- Status Header (R1.2) -->
-    <header class="bg-gray-800 shadow-md p-2 flex items-center justify-center flex-shrink-0">
-        <span id="statusIndicator" class="w-3 h-3 rounded-full mr-2 bg-gray-500"></span>
-        <span id="statusDisplay" class="text-sm font-semibold text-white">Idle</span>
-        <span id="errorDisplay" class="text-sm text-red-400 ml-2"></span>
+    <header class="bg-gray-800 shadow-md p-2 flex items-center justify-between flex-shrink-0 px-4">
+        <!-- Status Side -->
+        <div class="flex items-center">
+            <span id="statusIndicator" class="w-3 h-3 rounded-full mr-2 bg-gray-500"></span>
+            <span id="statusDisplay" class="text-sm font-semibold text-white">Idle</span>
+            <span id="errorDisplay" class="text-xs text-red-400 ml-2 truncate max-w-[150px]"></span>
+        </div>
+        <!-- Battery Side (New) -->
+        <div id="batteryDisplay" class="flex items-center text-gray-400 hidden">
+            <span id="batteryLevel" class="text-sm font-bold mr-1">--%</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h14a2 2 0 012 2v2a2 2 0 01-2 2H3a2 2 0 01-2-2v-2a2 2 0 012-2zm16 2h2"></path></svg>
+        </div>
     </header>
 
     <!-- Main Content -->
@@ -101,7 +109,7 @@
         <button id="startButton" class="p-3 bg-green-600 text-white font-bold rounded-lg shadow-lg active:bg-green-700 disabled:opacity-50 flex justify-center items-center" aria-label="Start">
             <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.118v3.764a1 1 0 001.555.832l3.197-1.882a1 1 0 000-1.664l-3.197-1.882z" clip-rule="evenodd"></path></svg>
         </button>
-        <!-- Pause Button -->
+        <!-- Pause / Export Button -->
         <button id="pauseButton" class="p-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg active:bg-blue-700 disabled:opacity-50 flex justify-center items-center" aria-label="Pause" disabled>
             <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
         </button>
@@ -120,24 +128,30 @@
         const statusIndicator = document.getElementById('statusIndicator');
         const statusDisplay = document.getElementById('statusDisplay');
         const errorDisplay = document.getElementById('errorDisplay');
+        const batteryDisplay = document.getElementById('batteryDisplay'); // NEW
+        const batteryLevelEl = document.getElementById('batteryLevel'); // NEW
+        
         const bpmDisplay = document.getElementById('bpmDisplay');
         const sessionTimer = document.getElementById('sessionTimer');
         const segmentTimer = document.getElementById('segmentTimer');
         const sessionAvgBpm = document.getElementById('sessionAvgBpm');
         const segmentAvgBpm = document.getElementById('segmentAvgBpm');
+        
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const markButton = document.getElementById('markButton');
-        const pauseButton = document.getElementById('pauseButton'); // NEW
+        const pauseButton = document.getElementById('pauseButton'); 
         const chartCanvas = document.getElementById('hrChart');
 
         // --- 2. State Variables ---
         let bluetoothDevice = null;
         let hrCharacteristic = null;
+        let batteryCharacteristic = null; // NEW
         let chartInstance = null;
         
-        let sessionReadings = [];
-        let segmentReadings = [];
+        // Reverted: Back to simple array of numbers (No CSV export needed)
+        let sessionReadings = []; 
+        let segmentReadings = []; 
         
         let sessionStartTime = 0;
         let segmentStartTime = 0;
@@ -149,62 +163,71 @@
         let sessionElapsedMs = 0;
         let segmentElapsedMs = 0;
         
-        let isPaused = false; // NEW: Pause state
-        let wakeLock = null; // Wake Lock API
+        let isPaused = false;
+        let wakeLock = null;
 
         // --- Constants ---
         const HR_SERVICE_UUID = 'heart_rate';
         const HR_CHARACTERISTIC_UUID = 'heart_rate_measurement';
-        const MAX_SESSION_DURATION = 8 * 60 * 60 * 1000; // 8 hours (R3.4)
-        const INITIAL_CHART_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (R4.2)
-        const CHART_Y_MAX_LEVELS = [160, 180, 200]; // Dynamic Y-axis levels
+        const BATTERY_SERVICE_UUID = 'battery_service'; // 0x180F
+        const BATTERY_LEVEL_UUID = 'battery_level'; // 0x2A19
+        
+        const MAX_SESSION_DURATION = 8 * 60 * 60 * 1000; // 8 hours
+        const INITIAL_CHART_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+        const CHART_Y_MAX_LEVELS = [160, 180, 200]; 
 
         // --- 3. UI and Helper Functions ---
 
-        /**
-         * (R1.2) Updates the status display with colored indicator.
-         */
         function setStatus(status, error = '') {
             statusDisplay.textContent = status;
             errorDisplay.textContent = error;
             console.log(`Status: ${status} ${error ? `(Error: ${error})` : ''}`);
 
-            statusIndicator.className = 'w-3 h-3 rounded-full mr-2'; // Reset classes
+            statusIndicator.className = 'w-3 h-3 rounded-full mr-2'; 
             if (error) {
-                statusIndicator.classList.add('bg-red-500'); // Red
+                statusIndicator.classList.add('bg-red-500'); 
             } else if (status === 'Connected') {
-                statusIndicator.classList.add('bg-green-500'); // Green
+                statusIndicator.classList.add('bg-green-500'); 
             } else if (status === 'Scanning...' || status === 'Connecting...') {
-                statusIndicator.classList.add('bg-yellow-500'); // Yellow
+                statusIndicator.classList.add('bg-yellow-500'); 
             } else if (status === 'Paused') {
-                statusIndicator.classList.add('bg-blue-500'); // Blue
+                statusIndicator.classList.add('bg-blue-500'); 
             } else {
-                statusIndicator.classList.add('bg-gray-500'); // Gray
+                statusIndicator.classList.add('bg-gray-500'); 
             }
         }
 
-        /**
-         * Manages the enabled/disabled state of control buttons.
-         */
         function updateButtonStates(isRecording, isPaused) {
             startButton.disabled = isRecording;
             stopButton.disabled = !isRecording;
             markButton.disabled = !isRecording || isPaused;
-            pauseButton.disabled = !isRecording;
             
-            // Toggle pause button icon and label
-            if (isPaused) {
-                pauseButton.innerHTML = `<svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.118v3.764a1 1 0 001.555.832l3.197-1.882a1 1 0 000-1.664l-3.197-1.882z" clip-rule="evenodd"></path></svg>`; // Play icon
-                pauseButton.setAttribute('aria-label', 'Resume');
+            // Logic for Pause Button
+            if (isRecording) {
+                // Mode: Recording - Show Pause/Resume
+                pauseButton.disabled = false;
+                // Ensure clean state classes
+                pauseButton.classList.remove('bg-blue-600', 'bg-yellow-500', 'active:bg-blue-700', 'active:bg-yellow-600');
+                
+                if (isPaused) {
+                    // Show Play (Resume) icon
+                    pauseButton.innerHTML = `<svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.118v3.764a1 1 0 001.555.832l3.197-1.882a1 1 0 000-1.664l-3.197-1.882z" clip-rule="evenodd"></path></svg>`; 
+                    pauseButton.setAttribute('aria-label', 'Resume');
+                    pauseButton.classList.add('bg-yellow-500', 'active:bg-yellow-600');
+                } else {
+                    // Show Pause icon
+                    pauseButton.innerHTML = `<svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>`;
+                    pauseButton.setAttribute('aria-label', 'Pause');
+                    pauseButton.classList.add('bg-blue-600', 'active:bg-blue-700');
+                }
             } else {
-                pauseButton.innerHTML = `<svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>`; // Pause icon
-                pauseButton.setAttribute('aria-label', 'Pause');
+                // Mode: Stopped - Button disabled
+                pauseButton.disabled = true;
+                pauseButton.innerHTML = `<svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>`;
+                pauseButton.className = 'p-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg active:bg-blue-700 disabled:opacity-50 flex justify-center items-center';
             }
         }
 
-        /**
-         * Formats milliseconds into HH:MM:SS format.
-         */
         function formatTime(ms) {
             const totalSeconds = Math.floor(ms / 1000);
             const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
@@ -213,10 +236,8 @@
             return `${hours}:${minutes}:${seconds}`;
         }
         
-        /**
-         * Calculates and updates the average BPM displays.
-         */
         function updateAverages() {
+            // Reverted to simple number array logic
             if (sessionReadings.length > 0) {
                 const sessionSum = sessionReadings.reduce((a, b) => a + b, 0);
                 sessionAvgBpm.textContent = Math.round(sessionSum / sessionReadings.length);
@@ -224,6 +245,7 @@
                 sessionAvgBpm.textContent = '--';
             }
             
+            // segmentReadings is still simple numbers
             if (segmentReadings.length > 0) {
                 const segmentSum = segmentReadings.reduce((a, b) => a + b, 0);
                 segmentAvgBpm.textContent = Math.round(segmentSum / segmentReadings.length);
@@ -232,9 +254,6 @@
             }
         }
 
-        /**
-         * Resets timers and average displays to their initial state.
-         */
         function resetDisplays() {
             stopTimers();
             sessionTimer.textContent = '00:00:00';
@@ -242,6 +261,7 @@
             bpmDisplay.textContent = '--';
             sessionAvgBpm.textContent = '--';
             segmentAvgBpm.textContent = '--';
+            batteryDisplay.classList.add('hidden'); // Hide battery
             sessionElapsedMs = 0;
             segmentElapsedMs = 0;
             isPaused = false;
@@ -250,12 +270,9 @@
 
         // --- 4. Timer Functions ---
 
-        /**
-         * (R2.2, R2.3) Starts the session and segment timers.
-         */
         function startTimers() {
-            sessionStartTime = Date.now() - sessionElapsedMs; // Account for resume
-            segmentStartTime = Date.now() - segmentElapsedMs; // Account for resume
+            sessionStartTime = Date.now() - sessionElapsedMs; 
+            segmentStartTime = Date.now() - segmentElapsedMs; 
             
             isPaused = false;
             
@@ -270,9 +287,6 @@
             }, 1000);
         }
 
-        /**
-         * Stops all running timers.
-         */
         function stopTimers() {
             clearInterval(sessionTimerInterval);
             clearInterval(segmentTimerInterval);
@@ -280,19 +294,13 @@
             segmentTimerInterval = null;
         }
 
-        /**
-         * Pauses all running timers.
-         */
         function pauseTimers() {
             stopTimers();
             isPaused = true;
         }
 
-        // --- 5. Charting Functions (R4.x) ---
+        // --- 5. Charting Functions ---
 
-        /**
-         * Initializes the Chart.js instance.
-         */
         function initChart() {
             if (chartInstance) {
                 chartInstance.destroy();
@@ -305,7 +313,7 @@
                     datasets: [{
                         label: 'Heart Rate (BPM)',
                         data: [],
-                        borderColor: 'rgb(248, 113, 113)', // red-400
+                        borderColor: 'rgb(248, 113, 113)', 
                         backgroundColor: 'rgba(248, 113, 113, 0.2)',
                         borderWidth: 2,
                         tension: 0.1,
@@ -319,59 +327,39 @@
                     scales: {
                         x: {
                             type: 'linear',
-                            title: {
-                                display: true,
-                                text: 'Session Time (Minutes)'
-                            },
-                            ticks: {
-                                color: 'rgb(209, 213, 219)' // gray-300
-                            },
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
+                            title: { display: true, text: 'Session Time (Minutes)' },
+                            ticks: { color: 'rgb(209, 213, 219)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
                             beginAtZero: true
                         },
                         y: {
-                            // R2.1 (Modified) No Y-axis title
                             title: { display: false }, 
-                            ticks: {
-                                color: 'rgb(209, 213, 219)' // gray-300
-                            },
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.1)'
-                            },
-                            // Dynamic Y-Axis: Start at 40-160
+                            ticks: { color: 'rgb(209, 213, 219)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
                             min: 40,
-                            max: CHART_Y_MAX_LEVELS[0] // 160
+                            max: CHART_Y_MAX_LEVELS[0] 
                         }
                     },
                     plugins: {
                         legend: { display: false },
-                        annotation: {
-                            annotations: {}
-                        }
+                        annotation: { annotations: {} }
                     }
                 }
             });
         }
         
-        /**
-         * Adds a new data point to the chart.
-         */
         function updateChartData(timestamp, bpm) {
-            if (!chartInstance || isPaused) return; // Don't update chart if paused
+            if (!chartInstance || isPaused) return; 
             
             const elapsedMinutes = (timestamp - sessionStartTime) / 60000;
             
             chartInstance.data.datasets[0].data.push({ x: elapsedMinutes, y: bpm });
             
-            // (R4.2) Dynamic X-Axis
             const sessionDurationMs = timestamp - sessionStartTime;
             let maxTime;
-            let axesChanged = false; // Flag to track if we need to update
-
+            
             if (sessionDurationMs <= INITIAL_CHART_WINDOW_MS) {
-                maxTime = INITIAL_CHART_WINDOW_MS / 60000; // 5.0 minutes
+                maxTime = INITIAL_CHART_WINDOW_MS / 60000; 
             } else {
                 maxTime = elapsedMinutes;
             }
@@ -379,32 +367,22 @@
             if (chartInstance.options.scales.x.max !== maxTime) {
                 chartInstance.options.scales.x.min = 0;
                 chartInstance.options.scales.x.max = maxTime;
-                axesChanged = true;
             }
 
-            // (R2.1 Modified) Dynamic Y-Axis
             const currentYMax = chartInstance.options.scales.y.max;
-            if (bpm >= (currentYMax - 5)) { // If BPM is within 5 of the max
+            if (bpm >= (currentYMax - 5)) { 
                 let newMax = currentYMax;
-                if (currentYMax < CHART_Y_MAX_LEVELS[1]) { // < 180
-                    newMax = CHART_Y_MAX_LEVELS[1]; // Set to 180
-                } else if (currentYMax < CHART_Y_MAX_LEVELS[2]) { // < 200
-                    newMax = CHART_Y_MAX_LEVELS[2]; // Set to 200
-                }
+                if (currentYMax < CHART_Y_MAX_LEVELS[1]) newMax = CHART_Y_MAX_LEVELS[1]; 
+                else if (currentYMax < CHART_Y_MAX_LEVELS[2]) newMax = CHART_Y_MAX_LEVELS[2]; 
                 
                 if (newMax !== currentYMax) {
                     chartInstance.options.scales.y.max = newMax;
-                    axesChanged = true;
                 }
             }
 
-            // *** FIX: Update chart every time ***
             chartInstance.update('none'); 
         }
 
-        /**
-         * (R4.3) Adds a vertical line to the chart at the current time.
-         */
         function addSegmentMarker() {
             if (!chartInstance) return;
             
@@ -416,7 +394,7 @@
                 type: 'line',
                 scaleID: 'x',
                 value: elapsedMinutes,
-                borderColor: 'rgb(234, 179, 8)', // yellow-500
+                borderColor: 'rgb(234, 179, 8)', 
                 borderWidth: 2,
                 borderDash: [6, 6],
                 label: {
@@ -430,123 +408,110 @@
             chartInstance.update('none');
         }
 
-        // --- 6. Core Logic Functions (R3.x) ---
+        // --- 6. Core Logic Functions ---
 
-        /**
-         * (R3.1) Starts the recording session.
-         */
         async function startRecording() {
-            // BUGFIX: If we are in a weird state, disconnect first
             if (bluetoothDevice) {
                 await bluetoothDevice.gatt.disconnect();
             }
 
-            // 1. Reset state
             sessionReadings = [];
             segmentReadings = [];
-            initChart(); // Re-initializes chart, including Y-axis
+            initChart(); 
             resetDisplays();
             
-            // 2. Update UI
             updateButtonStates(true, false);
             
-            // 3. Start scanning
             if (!await connectToBLE()) {
-                // Connection failed
-                stopRecording(); // Reset UI back to idle
+                stopRecording(); 
                 return;
             }
             
-            // 4. (R3.4) Set max session timeout
             clearTimeout(maxSessionTimeout);
             maxSessionTimeout = setTimeout(() => {
-                console.log("Max session duration (8 hours) reached. Stopping.");
+                console.log("Max session duration reached.");
                 setStatus("Stopped", "Max session (8h) reached");
                 stopRecording();
             }, MAX_SESSION_DURATION);
 
-            // 5. Request Wake Lock
             await requestWakeLock();
+            
+            // Protection against accidental tab close
+            window.onbeforeunload = function() {
+                return "Recording in progress. Are you sure you want to leave?";
+            };
         }
 
-        /**
-         * (R3.2) Stops the recording session.
-         */
         function stopRecording() {
             if (bluetoothDevice && bluetoothDevice.gatt.connected) {
                 bluetoothDevice.removeEventListener('gattserverdisconnected', onDeviceDisconnect);
                 
                 if (hrCharacteristic) {
+                    // BUG FIX: Removed e.foo
                     hrCharacteristic.stopNotifications()
-                        .catch(e => console.warn("Error stopping notifications (this is common on disconnect):", e.foo));
+                        .catch(e => console.warn("Error stopping HR notifications:", e));
                     hrCharacteristic.removeEventListener('characteristicvaluechanged', handleHRData);
                     hrCharacteristic = null;
                 }
+
+                if (batteryCharacteristic) {
+                    batteryCharacteristic.removeEventListener('characteristicvaluechanged', handleBatteryLevel);
+                    batteryCharacteristic = null;
+                }
                 
-                console.log("Disconnecting from device...");
+                console.log("Disconnecting...");
                 bluetoothDevice.gatt.disconnect();
             }
             
             bluetoothDevice = null;
             hrCharacteristic = null;
+            batteryCharacteristic = null;
             
             stopTimers();
             clearTimeout(maxSessionTimeout);
             maxSessionTimeout = null;
             
             updateButtonStates(false, false);
-            // Don't reset displays here, user might want to see final stats.
+            
             if (statusDisplay.textContent !== 'Error') {
                 setStatus('Idle');
             }
             
             releaseWakeLock();
+            window.onbeforeunload = null; // Remove tab close protection
             console.log("Session stopped.");
         }
 
-        /**
-         * (R3.3) Marks a new segment.
-         */
         function markSegment() {
-            if (isPaused) return; // Don't mark if paused
-
+            if (isPaused) return; 
             console.log("Marking new segment...");
             addSegmentMarker();
-            
             segmentStartTime = Date.now();
-            segmentElapsedMs = 0; // Reset elapsed time
+            segmentElapsedMs = 0; 
             segmentTimer.textContent = '00:00:00';
-            
             segmentReadings = [];
             segmentAvgBpm.textContent = '--';
         }
 
-        /**
-         * Toggles the pause state of the session.
-         */
         function togglePause() {
             if (isPaused) {
-                // Resuming
-                startTimers(); // Re-starts timers, sets isPaused = false
+                startTimers(); 
                 updateButtonStates(true, false);
                 setStatus('Connected');
             } else {
-                // Pausing
-                pauseTimers(); // Stops timers, sets isPaused = true
+                pauseTimers(); 
                 updateButtonStates(true, true);
                 setStatus('Paused');
             }
-            console.log(`Session ${isPaused ? 'Paused' : 'Resumed'}`);
         }
+        
+        // Removed exportCSV() function
 
-        // --- 7. Web Bluetooth Functions (R1.x) ---
+        // --- 8. Web Bluetooth Functions ---
 
-        /**
-         * (R1.1) Scans for and connects to the BLE Heart Rate Monitor.
-         */
         async function connectToBLE() {
             if (!navigator.bluetooth) {
-                setStatus('Error', 'Web Bluetooth is not supported on this browser. Try Bluefy on iOS.');
+                setStatus('Error', 'Web Bluetooth not supported.');
                 return false;
             }
 
@@ -555,119 +520,117 @@
                 
                 bluetoothDevice = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [HR_SERVICE_UUID] }],
-                    optionalServices: [HR_SERVICE_UUID]
+                    optionalServices: [HR_SERVICE_UUID, BATTERY_SERVICE_UUID] // Request Battery too
                 });
                 
                 setStatus('Connecting...');
-                console.log(`Device found: ${bluetoothDevice.name}. Connecting to GATT server...`);
-                
                 bluetoothDevice.addEventListener('gattserverdisconnected', onDeviceDisconnect);
                 
                 const server = await bluetoothDevice.gatt.connect();
-                console.log('GATT server connected, getting service...');
                 
+                // 1. Heart Rate Service
                 const service = await server.getPrimaryService(HR_SERVICE_UUID);
-                console.log('Service found, getting characteristic...');
-                
                 hrCharacteristic = await service.getCharacteristic(HR_CHARACTERISTIC_UUID);
-                console.log('Characteristic found, starting notifications...');
-                
                 await hrCharacteristic.startNotifications();
                 hrCharacteristic.addEventListener('characteristicvaluechanged', handleHRData);
                 
+                // 2. Battery Service (Optional, don't fail if missing)
+                try {
+                    const batService = await server.getPrimaryService(BATTERY_SERVICE_UUID);
+                    batteryCharacteristic = await batService.getCharacteristic(BATTERY_LEVEL_UUID);
+                    
+                    // Read initial value
+                    const val = await batteryCharacteristic.readValue();
+                    updateBatteryUI(val.getUint8(0));
+                    
+                    // Listen for changes (notifications usually not needed for battery but good to have)
+                    // await batteryCharacteristic.startNotifications();
+                    // batteryCharacteristic.addEventListener('characteristicvaluechanged', handleBatteryLevel);
+                } catch (e) {
+                    console.log("Battery service not available or permitted:", e);
+                }
+                
                 setStatus('Connected');
-                console.log('Connected and receiving data!');
-                
-                // Start timers *after* successful connection
                 startTimers();
-                
                 return true;
 
             } catch (error) {
-                console.error("Bluetooth Connection Error:", error);
+                console.error("BT Error:", error);
                 if (error.name === 'NotFoundError') {
                     setStatus('Error', 'No device selected.');
                 } else if (error.name === 'NotAllowedError') {
-                    setStatus('Error', 'Bluetooth permission was denied.');
+                    setStatus('Error', 'Bluetooth permission denied.');
                 } else {
-                    setStatus('Error', 'Connection failed. (Is device in range?)');
+                    setStatus('Error', 'Connection failed.');
                 }
                 return false;
             }
         }
         
-        /**
-         * (R1.4) Handles unexpected device disconnections.
-         */
         function onDeviceDisconnect() {
             console.log("Device disconnected unexpectedly.");
             setStatus('Error', 'Device Disconnected');
             stopRecording();
         }
 
-        /**
-         * Handles incoming data from the HR characteristic.
-         */
         function handleHRData(event) {
             const value = event.target.value;
             const flags = value.getUint8(0);
-            
             const is16bit = flags & 0x01;
             const bpm = is16bit ? value.getUint16(1, true) : value.getUint8(1);
-            
             const timestamp = Date.now();
             
-            // (R2.1) Update live display
             bpmDisplay.textContent = bpm;
             
-            if (isPaused) return; // If paused, only update BPM display, not stats
+            if (isPaused) return; 
 
+            // Reverted: Save just the BPM number
             sessionReadings.push(bpm);
             segmentReadings.push(bpm);
             
             updateAverages();
             updateChartData(timestamp, bpm);
         }
+        
+        function handleBatteryLevel(event) {
+            const level = event.target.value.getUint8(0);
+            updateBatteryUI(level);
+        }
+        
+        function updateBatteryUI(level) {
+            batteryLevelEl.textContent = level + "%";
+            batteryDisplay.classList.remove('hidden');
+        }
 
-        // --- 8. Wake Lock Functions ---
+        // --- 9. Wake Lock Functions ---
 
-        /**
-         * Requests a screen wake lock.
-         */
         async function requestWakeLock() {
             if ('wakeLock' in navigator) {
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
                     wakeLock.addEventListener('release', () => {
-                        console.log('Wake Lock was released.');
+                        console.log('Wake Lock released.');
                     });
-                    console.log('Wake Lock is active.');
                 } catch (err) {
-                    console.error(`Wake Lock failed: ${err.name}, ${err.message}`);
+                    console.error(`Wake Lock failed:`, err);
                 }
-            } else {
-                console.warn('Wake Lock API not supported.');
             }
         }
 
-        /**
-         * Releases the screen wake lock.
-         */
         function releaseWakeLock() {
             if (wakeLock) {
                 wakeLock.release();
                 wakeLock = null;
-                console.log('Wake Lock released.');
             }
         }
         
-        // --- 9. Initialization ---
+        // --- 10. Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
             initChart();
             updateButtonStates(false, false);
             
             if (!navigator.bluetooth) {
-                setStatus('Error', 'Use Bluefy browser on iOS or Chrome on other platforms.');
+                setStatus('Error', 'Use Bluefy (iOS) or Chrome.');
             } else {
                 setStatus('Idle');
             }
@@ -677,7 +640,6 @@
             markButton.addEventListener('click', markSegment);
             pauseButton.addEventListener('click', togglePause);
 
-            // Handle visibility change to re-acquire wake lock if necessary
             document.addEventListener('visibilitychange', async () => {
                 if (wakeLock !== null && document.visibilityState === 'visible') {
                     await requestWakeLock();
