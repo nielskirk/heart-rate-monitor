@@ -57,7 +57,7 @@
             <span id="statusDisplay" class="text-sm font-semibold text-white">Idle</span>
             <span id="errorDisplay" class="text-xs text-red-400 ml-2 truncate max-w-[150px]"></span>
         </div>
-        <!-- Battery Side (New) -->
+        <!-- Battery Side -->
         <div id="batteryDisplay" class="flex items-center text-gray-400 hidden">
             <span id="batteryLevel" class="text-sm font-bold mr-1">--%</span>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h14a2 2 0 012 2v2a2 2 0 01-2 2H3a2 2 0 01-2-2v-2a2 2 0 012-2zm16 2h2"></path></svg>
@@ -109,7 +109,7 @@
         <button id="startButton" class="p-3 bg-green-600 text-white font-bold rounded-lg shadow-lg active:bg-green-700 disabled:opacity-50 flex justify-center items-center" aria-label="Start">
             <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.118v3.764a1 1 0 001.555.832l3.197-1.882a1 1 0 000-1.664l-3.197-1.882z" clip-rule="evenodd"></path></svg>
         </button>
-        <!-- Pause / Export Button -->
+        <!-- Pause Button -->
         <button id="pauseButton" class="p-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg active:bg-blue-700 disabled:opacity-50 flex justify-center items-center" aria-label="Pause" disabled>
             <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
         </button>
@@ -128,8 +128,8 @@
         const statusIndicator = document.getElementById('statusIndicator');
         const statusDisplay = document.getElementById('statusDisplay');
         const errorDisplay = document.getElementById('errorDisplay');
-        const batteryDisplay = document.getElementById('batteryDisplay'); // NEW
-        const batteryLevelEl = document.getElementById('batteryLevel'); // NEW
+        const batteryDisplay = document.getElementById('batteryDisplay');
+        const batteryLevelEl = document.getElementById('batteryLevel');
         
         const bpmDisplay = document.getElementById('bpmDisplay');
         const sessionTimer = document.getElementById('sessionTimer');
@@ -146,17 +146,15 @@
         // --- 2. State Variables ---
         let bluetoothDevice = null;
         let hrCharacteristic = null;
-        let batteryCharacteristic = null; // NEW
+        let batteryCharacteristic = null;
         let chartInstance = null;
         
-        // Reverted: Back to simple array of numbers (No CSV export needed)
         let sessionReadings = []; 
         let segmentReadings = []; 
         
         let sessionStartTime = 0;
         let segmentStartTime = 0;
         
-        // Timer state
         let sessionTimerInterval = null;
         let segmentTimerInterval = null;
         let maxSessionTimeout = null;
@@ -166,19 +164,26 @@
         let isPaused = false;
         let wakeLock = null;
 
+        // NEW: Connection Watchdog variables
+        let lastDataTimestamp = 0;
+        let watchdogInterval = null;
+
         // --- Constants ---
         const HR_SERVICE_UUID = 'heart_rate';
         const HR_CHARACTERISTIC_UUID = 'heart_rate_measurement';
-        const BATTERY_SERVICE_UUID = 'battery_service'; // 0x180F
-        const BATTERY_LEVEL_UUID = 'battery_level'; // 0x2A19
+        const BATTERY_SERVICE_UUID = 'battery_service'; 
+        const BATTERY_LEVEL_UUID = 'battery_level'; 
         
-        const MAX_SESSION_DURATION = 8 * 60 * 60 * 1000; // 8 hours
-        const INITIAL_CHART_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+        const MAX_SESSION_DURATION = 8 * 60 * 60 * 1000; 
+        const INITIAL_CHART_WINDOW_MS = 5 * 60 * 1000; 
         const CHART_Y_MAX_LEVELS = [160, 180, 200]; 
 
         // --- 3. UI and Helper Functions ---
 
         function setStatus(status, error = '') {
+            // Don't overwrite if stalled unless it's an error or back to connected
+            if (status === 'Signal Lost' && statusDisplay.textContent === 'Signal Lost') return;
+
             statusDisplay.textContent = status;
             errorDisplay.textContent = error;
             console.log(`Status: ${status} ${error ? `(Error: ${error})` : ''}`);
@@ -192,6 +197,8 @@
                 statusIndicator.classList.add('bg-yellow-500'); 
             } else if (status === 'Paused') {
                 statusIndicator.classList.add('bg-blue-500'); 
+            } else if (status === 'Signal Lost') {
+                statusIndicator.classList.add('bg-orange-500'); // Orange for stalled signal
             } else {
                 statusIndicator.classList.add('bg-gray-500'); 
             }
@@ -202,26 +209,20 @@
             stopButton.disabled = !isRecording;
             markButton.disabled = !isRecording || isPaused;
             
-            // Logic for Pause Button
             if (isRecording) {
-                // Mode: Recording - Show Pause/Resume
                 pauseButton.disabled = false;
-                // Ensure clean state classes
                 pauseButton.classList.remove('bg-blue-600', 'bg-yellow-500', 'active:bg-blue-700', 'active:bg-yellow-600');
                 
                 if (isPaused) {
-                    // Show Play (Resume) icon
                     pauseButton.innerHTML = `<svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.118v3.764a1 1 0 001.555.832l3.197-1.882a1 1 0 000-1.664l-3.197-1.882z" clip-rule="evenodd"></path></svg>`; 
                     pauseButton.setAttribute('aria-label', 'Resume');
                     pauseButton.classList.add('bg-yellow-500', 'active:bg-yellow-600');
                 } else {
-                    // Show Pause icon
                     pauseButton.innerHTML = `<svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>`;
                     pauseButton.setAttribute('aria-label', 'Pause');
                     pauseButton.classList.add('bg-blue-600', 'active:bg-blue-700');
                 }
             } else {
-                // Mode: Stopped - Button disabled
                 pauseButton.disabled = true;
                 pauseButton.innerHTML = `<svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>`;
                 pauseButton.className = 'p-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg active:bg-blue-700 disabled:opacity-50 flex justify-center items-center';
@@ -237,7 +238,6 @@
         }
         
         function updateAverages() {
-            // Reverted to simple number array logic
             if (sessionReadings.length > 0) {
                 const sessionSum = sessionReadings.reduce((a, b) => a + b, 0);
                 sessionAvgBpm.textContent = Math.round(sessionSum / sessionReadings.length);
@@ -245,7 +245,6 @@
                 sessionAvgBpm.textContent = '--';
             }
             
-            // segmentReadings is still simple numbers
             if (segmentReadings.length > 0) {
                 const segmentSum = segmentReadings.reduce((a, b) => a + b, 0);
                 segmentAvgBpm.textContent = Math.round(segmentSum / segmentReadings.length);
@@ -261,7 +260,7 @@
             bpmDisplay.textContent = '--';
             sessionAvgBpm.textContent = '--';
             segmentAvgBpm.textContent = '--';
-            batteryDisplay.classList.add('hidden'); // Hide battery
+            batteryDisplay.classList.add('hidden'); 
             sessionElapsedMs = 0;
             segmentElapsedMs = 0;
             isPaused = false;
@@ -285,18 +284,37 @@
                 segmentElapsedMs = Date.now() - segmentStartTime;
                 segmentTimer.textContent = formatTime(segmentElapsedMs);
             }, 1000);
+
+            // Start Watchdog
+            startWatchdog();
         }
 
         function stopTimers() {
             clearInterval(sessionTimerInterval);
             clearInterval(segmentTimerInterval);
+            clearInterval(watchdogInterval); // Stop watchdog
             sessionTimerInterval = null;
             segmentTimerInterval = null;
+            watchdogInterval = null;
         }
 
         function pauseTimers() {
-            stopTimers();
+            stopTimers(); // This stops watchdog too, which is correct (no data expected)
             isPaused = true;
+        }
+
+        // NEW: Watchdog to detect silent stall
+        function startWatchdog() {
+            clearInterval(watchdogInterval);
+            lastDataTimestamp = Date.now();
+            watchdogInterval = setInterval(() => {
+                if (isPaused) return;
+                if (Date.now() - lastDataTimestamp > 5000) { // No data for 5 seconds
+                    setStatus('Signal Lost', 'Check device');
+                } else if (statusDisplay.textContent === 'Signal Lost') {
+                    setStatus('Connected');
+                }
+            }, 2000);
         }
 
         // --- 5. Charting Functions ---
@@ -405,7 +423,8 @@
                 }
             };
             
-            chartInstance.update('none');
+            // FIX 1: Force full update to render annotation immediately
+            chartInstance.update(); 
         }
 
         // --- 6. Core Logic Functions ---
@@ -436,7 +455,6 @@
 
             await requestWakeLock();
             
-            // Protection against accidental tab close
             window.onbeforeunload = function() {
                 return "Recording in progress. Are you sure you want to leave?";
             };
@@ -447,7 +465,6 @@
                 bluetoothDevice.removeEventListener('gattserverdisconnected', onDeviceDisconnect);
                 
                 if (hrCharacteristic) {
-                    // BUG FIX: Removed e.foo
                     hrCharacteristic.stopNotifications()
                         .catch(e => console.warn("Error stopping HR notifications:", e));
                     hrCharacteristic.removeEventListener('characteristicvaluechanged', handleHRData);
@@ -478,7 +495,7 @@
             }
             
             releaseWakeLock();
-            window.onbeforeunload = null; // Remove tab close protection
+            window.onbeforeunload = null; 
             console.log("Session stopped.");
         }
 
@@ -495,18 +512,16 @@
 
         function togglePause() {
             if (isPaused) {
-                startTimers(); 
+                startTimers(); // This restarts Watchdog too
                 updateButtonStates(true, false);
                 setStatus('Connected');
             } else {
-                pauseTimers(); 
+                pauseTimers(); // This pauses Watchdog too
                 updateButtonStates(true, true);
                 setStatus('Paused');
             }
         }
         
-        // Removed exportCSV() function
-
         // --- 8. Web Bluetooth Functions ---
 
         async function connectToBLE() {
@@ -520,7 +535,7 @@
                 
                 bluetoothDevice = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [HR_SERVICE_UUID] }],
-                    optionalServices: [HR_SERVICE_UUID, BATTERY_SERVICE_UUID] // Request Battery too
+                    optionalServices: [HR_SERVICE_UUID, BATTERY_SERVICE_UUID] 
                 });
                 
                 setStatus('Connecting...');
@@ -534,20 +549,14 @@
                 await hrCharacteristic.startNotifications();
                 hrCharacteristic.addEventListener('characteristicvaluechanged', handleHRData);
                 
-                // 2. Battery Service (Optional, don't fail if missing)
+                // 2. Battery Service
                 try {
                     const batService = await server.getPrimaryService(BATTERY_SERVICE_UUID);
                     batteryCharacteristic = await batService.getCharacteristic(BATTERY_LEVEL_UUID);
-                    
-                    // Read initial value
                     const val = await batteryCharacteristic.readValue();
                     updateBatteryUI(val.getUint8(0));
-                    
-                    // Listen for changes (notifications usually not needed for battery but good to have)
-                    // await batteryCharacteristic.startNotifications();
-                    // batteryCharacteristic.addEventListener('characteristicvaluechanged', handleBatteryLevel);
                 } catch (e) {
-                    console.log("Battery service not available or permitted:", e);
+                    console.log("Battery service not available:", e);
                 }
                 
                 setStatus('Connected');
@@ -580,11 +589,16 @@
             const bpm = is16bit ? value.getUint16(1, true) : value.getUint8(1);
             const timestamp = Date.now();
             
+            // Reset Watchdog Timer
+            lastDataTimestamp = Date.now();
+            if (statusDisplay.textContent === 'Signal Lost') {
+                setStatus('Connected');
+            }
+
             bpmDisplay.textContent = bpm;
             
             if (isPaused) return; 
 
-            // Reverted: Save just the BPM number
             sessionReadings.push(bpm);
             segmentReadings.push(bpm);
             
